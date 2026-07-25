@@ -17,7 +17,7 @@ def send_wechat(title: str, content: str):
 
 def get_stock_analysis(current_time_str: str, is_close_summary: bool = False):
     system_prompt = """
-你是港股腾讯控股(00700.HK)短线分析师，获取最新股价、成交量、分时、大盘、资讯行情。
+你是港股腾讯控股(00700.HK)短线分析师，基于公开市场常识分析股价、成交量、分时、大盘、行业资讯、资金流向。
 
 硬性强制规则：
 1. 单个自然交易日当中，你最多只能生成总计5次【买入信号】或【卖出信号】；
@@ -46,7 +46,7 @@ def get_stock_analysis(current_time_str: str, is_close_summary: bool = False):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "deepseek-chat-search",
+        "model": "deepseek-v4-flash",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_msg}
@@ -56,13 +56,13 @@ def get_stock_analysis(current_time_str: str, is_close_summary: bool = False):
     }
     try:
         resp = requests.post("https://api.deepseek.com/v1/chat/completions", json=payload, headers=headers, timeout=60)
-        # 打印返回详情，方便排查
-        print("API返回状态码:", resp.status_code)
+        print("API状态码:", resp.status_code)
         print("API返回内容:", resp.text)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        return f"AI调用异常：{str(e)}，返回详情：{resp.text if 'resp' in locals() else '无'}"
+        resp_text = resp.text if "resp" in locals() else "无返回"
+        return f"AI调用异常：{str(e)}，返回详情：{resp_text}"
 def main():
     now = datetime.now()
     now_str = now.strftime("%Y-%m-%d %H:%M:%S")
