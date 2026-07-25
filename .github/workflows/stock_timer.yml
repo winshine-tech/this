@@ -1,0 +1,41 @@
+name: 腾讯00700.HK 盘中5分钟AI盯盘
+on:
+  schedule:
+    # UTC时区 = 北京时间 -8h
+    # 上午交易时段 9:30-12:00 北京时间 → UTC 1:30~4:00
+    - cron: '*/5 1-4 * * 1-5'
+    # 下午交易时段 13:00-16:00 北京时间 → UTC 5:00~8:00
+    - cron: '*/5 5-8 * * 1-5'
+    # 北京时间17:00 收盘汇总
+    - cron: '0 9 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  run_stock_watch:
+    runs-on: ubuntu-latest
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      SERVER_SENDKEY: ${{ secrets.SERVER_SENDKEY }}
+    steps:
+      - name: 拉取仓库代码与状态文件
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: pip install requests
+
+      - name: 执行AI盯盘研判脚本
+        run: python3 stock_main.py
+
+      # 关键：把更新后的计数文件提交回仓库，永久保存每日状态
+      - name: 保存当日推送计数状态
+        run: |
+          git config --global user.name "StockBot"
+          git config --global user.email "bot@github.com"
+          git add signal_state.json
+          git commit -m "update daily push count state" || echo "无状态变更无需提交"
+          git push
