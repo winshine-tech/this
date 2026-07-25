@@ -1,0 +1,32 @@
+name: 定时网页AI解析推送微信
+# UTC时区 cron 表达式，北京时间 = UTC+8
+# 举例：每30分钟执行：*/30 * * * *
+# 每日9点、20点(北京时间)：0 1,12 * * *
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  # 支持手动一键运行测试
+  workflow_dispatch:
+
+jobs:
+  task:
+    runs-on: ubuntu-latest
+    # 读取仓库私密环境变量
+    env:
+      DEEPSEEK_KEY: ${{ secrets.DEEPSEEK_KEY }}
+      SEND_KEY: ${{ secrets.SEND_KEY }}
+      TARGET_URL: ${{ secrets.TARGET_URL }}
+    steps:
+      - name: 检出仓库代码
+        uses: actions/checkout@v4
+
+      - name: 安装Python环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: pip install requests
+
+      - name: 执行抓取AI任务
+        run: python3 crawl.py
