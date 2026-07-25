@@ -69,7 +69,7 @@ def main():
     hour = now.hour
     minute = now.minute
 
-    is_close_task = True
+    is_close_task = (hour == 17 and minute == 0)
     res = get_stock_analysis(now_str, is_close_task)
 
     if is_close_task:
