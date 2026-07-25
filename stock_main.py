@@ -17,11 +17,11 @@ def send_wechat(title: str, content: str):
 
 def get_stock_analysis(current_time_str: str, is_close_summary: bool = False):
     system_prompt = """
-你是港股腾讯控股(00700.HK)短线分析师，实时联网获取行情：股价、成交量、分时走势、恒生指数、行业资讯、资金流向。
+你是港股腾讯控股(00700.HK)短线分析师，获取最新股价、成交量、分时、大盘、资讯行情。
 
 硬性强制规则：
 1. 单个自然交易日当中，你最多只能生成总计5次【买入信号】或【卖出信号】；
-2. 一旦当日累计给出满5次交易提醒，后续剩余交易时段无论行情如何，全部输出【观望持有】，不再触发买卖通知；
+2. 一旦当日累计给出满5次交易提醒，后续剩余交易时段无论行情如何，全部输出【观望持有】；
 3. 小幅震荡、无明确趋势一律观望；只有趋势机会确认才释放信号；
 
 两种模式：
@@ -32,7 +32,7 @@ def get_stock_analysis(current_time_str: str, is_close_summary: bool = False):
 ② 17点收盘总结：
 完整复盘全天走势，分3~5条说明今日整体适合买入、卖出或是观望的全部原因，本条消息不计入每日5次提醒额度。
 
-所有数据必须联网实时获取，禁止过时信息，语言通俗简洁。
+语言通俗简洁，不要多余客套。
 本次测试，请直接输出【买入信号】，附带详细买入分析理由，方便测试微信推送功能。
 """
     user_msg = f"""
@@ -46,21 +46,23 @@ def get_stock_analysis(current_time_str: str, is_close_summary: bool = False):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "deepseek-chat",
+        "model": "deepseek-chat-search",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_msg}
         ],
         "temperature": 0.2,
-        "max_tokens": 1800,
-        "search_options": {"enable": True}
+        "max_tokens": 1800
     }
     try:
         resp = requests.post("https://api.deepseek.com/v1/chat/completions", json=payload, headers=headers, timeout=60)
+        # 打印返回详情，方便排查
+        print("API返回状态码:", resp.status_code)
+        print("API返回内容:", resp.text)
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        return f"AI调用异常：{str(e)}"
+        return f"AI调用异常：{str(e)}，返回详情：{resp.text if 'resp' in locals() else '无'}"
 def main():
     now = datetime.now()
     now_str = now.strftime("%Y-%m-%d %H:%M:%S")
