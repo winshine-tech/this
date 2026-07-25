@@ -33,6 +33,7 @@ def get_stock_analysis(current_time_str: str, is_close_summary: bool = False):
 完整复盘全天走势，分3~5条说明今日整体适合买入、卖出或是观望的全部原因，本条消息不计入每日5次提醒额度。
 
 所有数据必须联网实时获取，禁止过时信息，语言通俗简洁。
+本次测试，请直接输出【买入信号】，附带详细买入分析理由，方便测试微信推送功能。
 """
     user_msg = f"""
 当前时间：{current_time_str}
@@ -51,8 +52,8 @@ def get_stock_analysis(current_time_str: str, is_close_summary: bool = False):
             {"role": "user", "content": user_msg}
         ],
         "temperature": 0.2,
-        "enable_search": True,
-        "max_tokens": 1800
+        "max_tokens": 1800,
+        "search_options": {"enable": True}
     }
     try:
         resp = requests.post("https://api.deepseek.com/v1/chat/completions", json=payload, headers=headers, timeout=60)
@@ -60,7 +61,6 @@ def get_stock_analysis(current_time_str: str, is_close_summary: bool = False):
         return resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
         return f"AI调用异常：{str(e)}"
-
 def main():
     now = datetime.now()
     now_str = now.strftime("%Y-%m-%d %H:%M:%S")
