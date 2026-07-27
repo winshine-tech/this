@@ -2,10 +2,11 @@ name: 腾讯00700.HK 盘中5分钟AI盯盘
 on:
   schedule:
     # UTC时间=北京时间-8小时
-    # 港股上午9:30-12:00 → UTC 1:30~4:00
+    # 港股上午9:30-12:00 → UTC 1:30~4:00 每5分钟执行
     - cron: '*/5 1-4 * * 1-5'
-    # 港股下午13:00-16:00 → UTC 5:00~8:00
+    # 北京时间17:00收盘总结 = UTC 09:00，每日1次
     - cron: '0 9 * * 1-5'
+  # 支持手动点击运行测试
   workflow_dispatch:
 
 jobs:
@@ -23,8 +24,9 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: 安装依赖requests
-        run: pip install requests
+      # 替换原来 pip install requests，通过txt批量安装依赖
+      - name: 安装全部依赖
+        run: pip install -r requirements.txt
 
       - name: 执行股票盯盘脚本
         run: python3 stock_main.py
