@@ -2,6 +2,7 @@ import os
 import requests
 import json
 from datetime import datetime
+import yfinance as yf
 
 # 环境变量密钥
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY")
@@ -16,66 +17,87 @@ def is_hk_trading_day(check_date: datetime) -> bool:
     # 可自行补充节假日日期黑名单
     return True
 
-# ===================== 工具2：新浪港股接口获取00700行情 =====================
-def get_sina_hk_data():
+# ===================== 工具2：Yahoo Finance 港股0700行情（海外首选） =====================
+def get_yahoo_hk_data():
     try:
-        # 新浪港股公开接口 00700腾讯控股
-        url = "https://hq.sinajs.cn/list=hk00700"
-        resp = requests.get(url, timeout=8)
+        # 港股代码格式：0700.HK
+        ticker = yf.Ticker("0700.HK")
+        info = ticker.info
+        hist = ticker.history(period="1d", interval="1m")
+        if len(hist) == 0:
+            raise Exception("无行情数据")
+
+        price = round(hist["Close"].iloc[-1], 2)
+        prev_close = info.get("previousClose", 0)
+        open_price = round(hist["Open"].iloc[0], 2)
+        high = round(hist["High"].max(), 2)
+        low = round(hist["Low"].min(), 2)
+        volume = int(hist["Volume"].sum())
+        change = round(price - prev_close, 2)
+        change_percent = round((change / prev_close) * 100, 2) if prev_close != 0 else 0
+
+        return {
+            "source": "Yahoo Finance",
+            "price": price,
+            "prev_close": prev_close,
+            "open": open_price,
+            "high": high,
+            "low": low,
+            "volume": volume,
+            "change": change,
+            "change_percent": change_percent
+        }
+    except Exception as e:
+        return {"error": f"Yahoo接口失效：{str(e)}"}
+
+# ===================== 工具3：腾讯gtimg备用接口（兜底双数据源） =====================
+def get_gtimg_hk_data():
+    try:
+        url = "https://qt.gtimg.cn/q=hk00700"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+        }
+        resp = requests.get(url, headers=headers, timeout=10)
         resp.encoding = "gbk"
-        raw_text = resp.text
-        # 截取数据部分
-        data_part = raw_text.split('"')[1]
-        arr = data_part.split(",")
+        raw = resp.text
+        data_arr = raw.split("~")
+        # 字段映射腾讯传统行情格式
+        prev_close = float(data_arr[4])
+        price = float(data_arr[3])
+        open_p = float(data_arr[5])
+        high = float(data_arr[33])
+        low = float(data_arr[34])
+        volume = int(data_arr[36])
+        change = round(price - prev_close, 2)
+        change_percent = round((change / prev_close) * 100, 2) if prev_close != 0 else 0
+
         return {
-            "source": "新浪港股",
-            "price": float(arr[2]) if arr[2] else 0,
-            "prev_close": float(arr[3]) if arr[3] else 0,
-            "open": float(arr[4]) if arr[4] else 0,
-            "high": float(arr[5]) if arr[5] else 0,
-            "low": float(arr[6]) if arr[6] else 0,
-            "volume": int(arr[10]) if arr[10] else 0,
-            "change": round(float(arr[2]) - float(arr[3]), 2),
-            "change_percent": round((float(arr[2]) - float(arr[3])) / float(arr[3]) * 100, 2)
+            "source": "腾讯gtimg行情",
+            "price": price,
+            "prev_close": prev_close,
+            "open": open_p,
+            "high": high,
+            "low": low,
+            "volume": volume,
+            "change": change,
+            "change_percent": change_percent
         }
     except Exception as e:
-        return {"error": f"新浪接口失效：{str(e)}"}
+        return {"error": f"腾讯gtimg接口失效：{str(e)}"}
 
-# ===================== 工具3：腾讯财经接口获取00700行情 =====================
-def get_qq_finance_hk_data():
-    try:
-        url = "https://stockapi.qq.com/v1/hk/stock?code=00700"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, headers=headers, timeout=8)
-        res_json = resp.json()
-        data = res_json.get("data", {})
-        return {
-            "source": "腾讯财经",
-            "price": data.get("now", 0),
-            "prev_close": data.get("close_yest", 0),
-            "open": data.get("open", 0),
-            "high": data.get("high", 0),
-            "low": data.get("low", 0),
-            "volume": data.get("volume", 0),
-            "change": data.get("diff", 0),
-            "change_percent": data.get("diff_rate", 0)
-        }
-    except Exception as e:
-        return {"error": f"腾讯财经接口失效：{str(e)}"}
-
-# ===================== 工具4：双数据源合并行情 =====================
+# ===================== 工具4：双数据源合并行情（替换原有新浪+腾讯） =====================
 def get_merge_stock_data():
-    sina = get_sina_hk_data()
-    qq = get_qq_finance_hk_data()
+    yahoo = get_yahoo_hk_data()
+    tencent = get_gtimg_hk_data()
     valid_data_list = []
-    if "error" not in sina:
-        valid_data_list.append(sina)
-    if "error" not in qq:
-        valid_data_list.append(qq)
+    if "error" not in yahoo:
+        valid_data_list.append(yahoo)
+    if "error" not in tencent:
+        valid_data_list.append(tencent)
     # 两个接口全部失效
     if len(valid_data_list) == 0:
-        return {"error": "新浪、腾讯财经双行情接口全部获取失败，无行情数据"}
-    # 优先取新浪为主数据，附带腾讯数据作为参考
+        return {"error": "Yahoo、腾讯双行情接口全部获取失败，无行情数据"}
+    # 优先取Yahoo为主数据
     main_data = valid_data_list[0]
     return {
         "main_source": main_data["source"],
@@ -104,7 +126,7 @@ def send_wechat(title: str, content: str):
     except Exception as e:
         print(f"微信推送异常: {str(e)}")
 
-# ===================== 工具6：DeepSeek分析整合行情 =====================
+# ===================== 工具6：DeepSeek分析整合行情（完全无需改动） =====================
 def get_stock_analysis(current_time_str: str, merge_data: dict, is_close_summary: bool = False):
     # 双接口全部失效，直接返回错误
     if "error" in merge_data:
@@ -130,7 +152,7 @@ def get_stock_analysis(current_time_str: str, merge_data: dict, is_close_summary
 
     system_prompt = """
 你是港股专业短线分析师，严格遵守以下硬性约束：
-1. 所有分析只能依托本次给到的新浪+腾讯财经真实行情数据，严禁虚构任何未提供的数据；
+1. 所有分析只能依托本次给到的真实行情数据，严禁虚构任何未提供的数据；
 2. 单个自然交易日，最多合计输出5次【买入信号】/【卖出信号】，达到上限后当日剩余时段统一输出【观望持有】；
 3. 小幅震荡、无明确多空支撑压力，一律输出【观望持有】；只有出现清晰趋势才给出交易信号；
 4. 周六周日休市直接判定观望，不产生任何买卖建议。
@@ -143,7 +165,7 @@ def get_stock_analysis(current_time_str: str, merge_data: dict, is_close_summary
     user_msg = f"""
 {stock_info_text}
 任务类型：{"收盘全日复盘总结" if is_close_summary else "盘中实时行情巡检"}
-基于以上两套官方财经接口真实数据，给出客观行情研判。
+基于以上两套数据源真实数据，给出客观行情研判。
 """
 
     headers = {
@@ -180,7 +202,7 @@ def main():
         print(f"{now_str} 当前为周末休市，程序直接退出，不执行行情分析")
         return
 
-    # 2. 拉取新浪+腾讯双接口合并行情
+    # 2. 拉取双接口合并行情
     stock_data = get_merge_stock_data()
 
     # 3. 判断是否17点收盘总结任务
